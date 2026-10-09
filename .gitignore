@@ -1,0 +1,32 @@
+# 의존성·빌드 결과
+node_modules/
+dist/
+
+# Tauri/Rust 빌드 결과 (src-tauri 추가 후). Cargo.lock과 src-tauri/icons/는 커밋한다.
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# 비밀 정보: 자동 업데이트 서명 비공개 키, 환경 변수 파일. 절대 커밋하지 않는다.
+# (공개 키는 tauri.conf.json에 들어가므로 별도 파일이 필요 없다.)
+*.key
+*.pem
+.env
+.env.*
+!.env.example
+
+# 로그·캐시·임시 파일
+*.log
+.vite/
+.cache/
+coverage/
+*.swp
+
+# OS·에디터
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# 개인 작업 문서·비공개 기록(공개 저장소에 올리지 않는다)
+TASKS.md
+private/

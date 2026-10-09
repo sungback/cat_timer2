@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>고양이 타이머</title>
+  </head>
+  <body>
+    <img id="background" class="background" alt="" />
+    <img class="icon" src="/icon.svg" alt="" />
+
+    <form id="controls" class="controls" autocomplete="off">
+      <label class="minutes">
+        <input id="minutes" type="number" inputmode="numeric" min="1" max="180" step="1" value="15" />
+        <span>분</span>
+      </label>
+      <button id="toggle" type="button" class="primary">시작</button>
+      <button id="reset" type="button">리셋</button>
+      <button id="prev-cat" type="button" aria-label="이전 사진" aria-keyshortcuts="ArrowLeft" title="이전 사진 (←)">&lt;-</button>
+      <button id="next-cat" type="button" aria-label="다음 사진" aria-keyshortcuts="ArrowRight" title="다음 사진 (→)">-&gt;</button>
+      <span id="status" class="status" role="status" aria-live="polite">대기 중</span>
+    </form>
+
+    <div id="remaining" class="remaining" role="timer" aria-label="남은 시간">15:00</div>
+
+    <div id="blocks" class="blocks" aria-hidden="true"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

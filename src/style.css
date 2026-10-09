@@ -1,0 +1,160 @@
+:root {
+  --block-color: #3e393d; /* 원본 pptx의 블록 색 */
+  --panel-bg: rgb(20 18 20 / 0.7);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #1b1a1c;
+  color: #fff;
+  font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+
+.background {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 아이콘 SVG 자체가 흰색이다. 밝은 사진 위에서도 보이도록 그림자만 준다. */
+.icon {
+  position: fixed;
+  top: 5.7vh;
+  left: 3vw;
+  width: 11.9vw;
+  height: 11.9vw;
+  max-height: 21vh;
+  max-width: 21vh;
+  filter: drop-shadow(0 0 6px rgb(0 0 0 / 0.6));
+  user-select: none;
+}
+
+.controls {
+  position: fixed;
+  top: 2vh;
+  right: 2vw;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.8rem;
+  background: var(--panel-bg);
+  backdrop-filter: blur(8px);
+}
+
+.minutes {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.minutes input {
+  width: 4.5rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 0.1);
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+
+.minutes input:disabled {
+  opacity: 0.5;
+}
+
+.controls button {
+  padding: 0.45rem 0.9rem;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: 0.5rem;
+  background: rgb(255 255 255 / 0.1);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.controls button.primary {
+  min-width: 5.5rem;
+  border-color: transparent;
+  background: #e8845c;
+  font-weight: 700;
+}
+
+.controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.controls button:focus-visible,
+.minutes input:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.status {
+  min-width: 4.5rem;
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+/* 블록 바로 위에 남은 시간을 작게 보여 준다. */
+.remaining {
+  position: fixed;
+  right: 2vw;
+  bottom: calc(20.3vh + 1.5vh);
+  padding: 0.2rem 0.7rem;
+  border-radius: 0.5rem;
+  background: var(--panel-bg);
+  font-size: clamp(1rem, 1.8vw, 1.6rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* 하단에 분 수만큼의 블록(1블록 = 1분)이 왼쪽부터 순서대로 사라진다. 원본은 숫자 1~15 블록 15개. */
+.blocks {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 20.3vh;
+  display: grid;
+  grid-template-columns: repeat(var(--block-count, 15), 1fr);
+  gap: 0.09vw;
+}
+
+.block {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 0.4vw;
+  background: var(--block-color);
+  color: #fff;
+  font-size: clamp(0.8rem, 1.6vw, 2.2rem);
+  font-weight: 700;
+  /* JS가 --wiped(0~100%)를 넣으면 왼쪽부터 잘려 나간다. */
+  clip-path: inset(0 0 0 var(--wiped, 0%));
+}
+
+/* 블록이 너무 많으면 숫자를 숨기고, 틈도 없애 얇은 막대로 보이게 한다. */
+.blocks.unlabeled {
+  gap: 0;
+}
+
+.blocks.unlabeled .block {
+  font-size: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .background {
+    transition: opacity 0.3s;
+  }
+}
