@@ -1,0 +1,26 @@
+name: ci
+
+# 푸시·PR마다 웹앱의 타입 검사, 테스트, 빌드를 확인한다.
+# 앱 설치 파일(macOS·Windows) 빌드와 릴리스는 build.yml이 맡는다(태그 v* 푸시).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # tsc(타입 검사)와 vite build를 함께 돌린다.
+      - run: npm run build
