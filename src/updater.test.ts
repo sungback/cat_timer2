@@ -87,3 +87,20 @@ test("bannerView(failed): 오류 문구, 다시 시도, 릴리스 페이지 열�
   // 실패 후에도 타이머가 돌고 있으면 다시 시도할 수 없다.
   assert.equal(bannerView({ kind: "failed", info, message: "x" }, "running").installDisabled, true);
 });
+
+test("bannerView(notice): 안내 문구와 닫기 버튼만 보인다(타이머 상태와 무관)", () => {
+  for (const timer of ["idle", "running", "paused", "finished"] as const) {
+    const view = bannerView({ kind: "notice", message: "최신 버전입니다. (v0.1.1)" }, timer);
+    assert.equal(view.visible, true);
+    assert.equal(view.text, "최신 버전입니다. (v0.1.1)");
+    assert.equal(view.showInstall, false);
+    assert.equal(view.showRelease, false);
+    assert.equal(view.showLater, true);
+    assert.equal(view.laterLabel, "닫기");
+  }
+});
+
+test("bannerView: 새 버전·실패 배너의 보조 버튼 이름은 '나중에'", () => {
+  assert.equal(bannerView({ kind: "available", info }, "idle").laterLabel, "나중에");
+  assert.equal(bannerView({ kind: "failed", info, message: "x" }, "idle").laterLabel, "나중에");
+});

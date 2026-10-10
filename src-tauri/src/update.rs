@@ -651,6 +651,19 @@ pub async fn check_update(app: AppHandle) -> Option<UpdateInfo> {
   pick_update(&release, &current, asset)
 }
 
+/// 사용자가 "업데이트 확인" 버튼을 눌렀을 때 쓴다. check_update와 달리 "최신 버전"(Ok(None))과
+/// "확인하지 못함"(Err)을 구분해서 화면에 알맞은 문구를 보여 줄 수 있게 한다.
+#[tauri::command]
+pub async fn check_update_manual(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
+  let asset = platform_asset().ok_or("이 운영체제는 자동 업데이트를 지원하지 않습니다.")?;
+  let current = app.package_info().version.to_string();
+  let client = http_client(API_TIMEOUT)?;
+  let release = fetch_latest(&client)
+    .await
+    .ok_or("최신 버전 정보를 가져오지 못했습니다. 네트워크를 확인해 주세요.")?;
+  Ok(pick_update(&release, &current, asset))
+}
+
 /// 사용자가 승인한 뒤 호출한다. 다운로드 → sha256 검증 → 도우미 실행 → 앱 종료.
 /// 실패하면 아무것도 교체하지 않고 임시 파일을 지운 뒤 오류 문구를 돌려준다.
 #[tauri::command]

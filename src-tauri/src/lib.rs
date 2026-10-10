@@ -5,6 +5,7 @@ pub fn run() {
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![
       update::check_update,
+      update::check_update_manual,
       update::apply_update,
       update::open_release_page
     ])

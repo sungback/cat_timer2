@@ -109,6 +109,14 @@ body {
   opacity: 0.6;
 }
 
+/* 버전 옆 보조 버튼: 큰 버튼보다 작고 흐리게. */
+.controls button.link {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
 /* 새 버전 알림: 컨트롤 패널 바로 아래. hidden 속성이 display를 덮어쓰지 않게 한다. */
 .update-banner {
   position: fixed;

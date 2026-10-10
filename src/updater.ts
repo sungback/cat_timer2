@@ -5,6 +5,8 @@ export type UpdateInfo = { current: string; latest: string; tag: string; htmlUrl
 
 export type UpdateState =
   | { kind: "none" }
+  // 수동 확인 결과 안내("최신 버전입니다" 등). 설치할 것이 없다.
+  | { kind: "notice"; message: string }
   | { kind: "available"; info: UpdateInfo }
   | { kind: "downloading"; info: UpdateInfo; percent: number | null }
   | { kind: "failed"; info: UpdateInfo; message: string };
@@ -17,6 +19,7 @@ export type BannerView = {
   installDisabled: boolean;
   showRelease: boolean;
   showLater: boolean;
+  laterLabel: string;
 };
 
 const RELEASES_URL = "https://github.com/sungback/cat_timer2/releases";
@@ -50,10 +53,13 @@ export function bannerView(state: UpdateState, timer: Status): BannerView {
     installDisabled: false,
     showRelease: false,
     showLater: false,
+    laterLabel: "나중에",
   };
   switch (state.kind) {
     case "none":
       return hidden;
+    case "notice":
+      return { ...hidden, visible: true, text: state.message, showLater: true, laterLabel: "닫기" };
     case "available": {
       const ready = canInstall(timer);
       const base = `새 버전 v${state.info.latest}이 있습니다. (현재 v${state.info.current})`;
@@ -65,6 +71,7 @@ export function bannerView(state: UpdateState, timer: Status): BannerView {
         installDisabled: !ready,
         showRelease: false,
         showLater: true,
+        laterLabel: "나중에",
       };
     }
     case "downloading":
@@ -78,6 +85,7 @@ export function bannerView(state: UpdateState, timer: Status): BannerView {
         installDisabled: !canInstall(timer),
         showRelease: true,
         showLater: true,
+        laterLabel: "나중에",
       };
   }
 }
@@ -111,6 +119,7 @@ export function initUpdater(getTimerStatus: () => Status): { refresh: () => void
   const releaseButton = byId<HTMLButtonElement>("update-release");
   const laterButton = byId<HTMLButtonElement>("update-later");
   const versionLabel = byId<HTMLSpanElement>("app-version");
+  const checkButton = byId<HTMLButtonElement>("update-check");
   if (!banner || !text || !installButton || !releaseButton || !laterButton) {
     return { refresh: () => {} };
   }
@@ -126,6 +135,42 @@ export function initUpdater(getTimerStatus: () => Status): { refresh: () => void
     installButton!.disabled = view.installDisabled;
     releaseButton!.hidden = !view.showRelease;
     laterButton!.hidden = !view.showLater;
+    laterButton!.textContent = view.laterLabel;
+  }
+
+  // await 뒤에는 state가 바뀌었을 수 있다. TS가 앞선 검사로 타입을 좁히지 않도록 함수로 묶는다.
+  function isDownloading(): boolean {
+    return state.kind === "downloading";
+  }
+
+  // 수동 확인. 내려받는 중에는 건드리지 않는다. 결과는 배너로 알린다.
+  async function checkNow(): Promise<void> {
+    const bridge = tauriBridge();
+    if (!checkButton || isDownloading()) return;
+    if (!bridge) {
+      state = { kind: "notice", message: "업데이트 확인은 설치한 앱에서만 쓸 수 있습니다." };
+      render();
+      return;
+    }
+    checkButton.disabled = true;
+    checkButton.textContent = "확인 중...";
+    try {
+      const info = await bridge.core.invoke<UpdateInfo | null>("check_update_manual");
+      if (isDownloading()) return;
+      if (info) {
+        state = { kind: "available", info };
+      } else {
+        const version = await bridge.app.getVersion().catch(() => "");
+        state = { kind: "notice", message: `최신 버전입니다.${version ? ` (v${version})` : ""}` };
+      }
+    } catch (error) {
+      if (isDownloading()) return;
+      state = { kind: "notice", message: `업데이트를 확인하지 못했습니다. ${String(error)}` };
+    } finally {
+      checkButton.disabled = false;
+      checkButton.textContent = "업데이트 확인";
+      render();
+    }
   }
 
   async function install(): Promise<void> {
@@ -163,6 +208,7 @@ export function initUpdater(getTimerStatus: () => Status): { refresh: () => void
     }
   }
 
+  checkButton?.addEventListener("click", () => void checkNow());
   installButton.addEventListener("click", () => void install());
   releaseButton.addEventListener("click", () => void openReleasePage());
   laterButton.addEventListener("click", () => {
