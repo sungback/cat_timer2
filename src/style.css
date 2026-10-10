@@ -1,6 +1,8 @@
 :root {
   --block-color: #3e393d; /* 원본 pptx의 블록 색 */
   --panel-bg: rgb(20 18 20 / 0.7);
+  /* 블록 줄 높이: 16:9 기준 창 높이의 20.3%(= 폭의 11.42%). 세로로 긴 창에서 더 두꺼워지지 않게 폭 기준과 작은 쪽을 쓴다. */
+  --blocks-height: min(20.3vh, 11.42vw);
 }
 
 * {
@@ -157,7 +159,7 @@ body {
 .remaining {
   position: fixed;
   right: 2vw;
-  bottom: calc(20.3vh + 1.5vh);
+  bottom: calc(var(--blocks-height) + 1.5vh);
   padding: 0.2rem 0.7rem;
   border-radius: 0.5rem;
   background: var(--panel-bg);
@@ -172,7 +174,7 @@ body {
   right: 0;
   bottom: 0;
   left: 0;
-  height: 20.3vh;
+  height: var(--blocks-height);
   display: grid;
   grid-template-columns: repeat(var(--block-count, 15), 1fr);
   gap: 0.09vw;
