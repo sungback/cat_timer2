@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { catStepForKey, pickCatIndex, stepCatIndex } from "./cats.ts";
-import { Countdown, blockCountFor, blockProgress, formatRemaining, parseMinutes } from "./timer.ts";
+import {
+  Countdown,
+  blockCountFor,
+  blockProgress,
+  finishNoticeVisible,
+  formatRemaining,
+  parseMinutes,
+  timerKeyAction,
+} from "./timer.ts";
 
 function fakeClock() {
   let time = 1000;
@@ -159,5 +167,19 @@ test("catStepForKey: ←는 이전, →는 다음, 다른 키는 무시", () => 
   assert.equal(catStepForKey("ArrowLeft"), -1);
   for (const other of ["ArrowUp", "ArrowDown", "Enter", " ", "a", "Tab", ""]) {
     assert.equal(catStepForKey(other), null, other);
+  }
+});
+
+test("timerKeyAction: Space는 시작/일시정지, R은 리셋, 그 밖은 null", () => {
+  assert.equal(timerKeyAction("Space"), "toggle");
+  assert.equal(timerKeyAction("KeyR"), "reset");
+  for (const code of ["Enter", "KeyS", "ArrowLeft", ""]) assert.equal(timerKeyAction(code), null, code);
+});
+
+test("finishNoticeVisible: 종료 상태이고 닫지 않았을 때만 보인다", () => {
+  assert.equal(finishNoticeVisible("finished", false), true);
+  assert.equal(finishNoticeVisible("finished", true), false);
+  for (const status of ["idle", "running", "paused"] as const) {
+    assert.equal(finishNoticeVisible(status, false), false, status);
   }
 });

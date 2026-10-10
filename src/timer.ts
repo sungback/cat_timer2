@@ -92,3 +92,17 @@ export class Countdown {
     return true;
   }
 }
+
+export type TimerKeyAction = "toggle" | "reset";
+
+// 키보드 단축키: Space = 시작/일시정지, R = 리셋. 한글 자판에서도 되도록 key가 아니라 물리 키(code)로 판단한다.
+export function timerKeyAction(code: string): TimerKeyAction | null {
+  if (code === "Space") return "toggle";
+  if (code === "KeyR") return "reset";
+  return null;
+}
+
+// 종료 알림("시간 종료!")을 보여 줄지. 종료 상태이고 사용자가 닫지 않았을 때만 보인다.
+export function finishNoticeVisible(status: Status, dismissed: boolean): boolean {
+  return status === "finished" && !dismissed;
+}

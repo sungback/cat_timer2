@@ -203,6 +203,60 @@ body {
   font-size: 0;
 }
 
+/* 시간 종료 알림: 화면이 3번 깜빡이고 가운데에 문구가 남는다. 문구 버튼만 클릭을 받아 아래 버튼을 막지 않는다. */
+.finish-notice {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.finish-notice[hidden] {
+  display: none;
+}
+
+.finish-notice::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  animation: finish-flash 0.5s ease-in-out 3;
+}
+
+.finish-text {
+  position: relative;
+  padding: 0.4em 1.1em;
+  border: 0;
+  border-radius: 1rem;
+  background: var(--panel-bg);
+  color: #fff;
+  font: inherit;
+  font-size: clamp(2rem, 6vw, 5rem);
+  font-weight: 800;
+  cursor: pointer;
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+}
+
+@keyframes finish-flash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finish-notice::before {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .background {
     transition: opacity 0.3s;

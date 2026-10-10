@@ -1,16 +1,18 @@
 import "./style.css";
 import { playAlarm, unlockAlarm } from "./alarm.ts";
 import { catStepForKey, pickCatIndex, stepCatIndex } from "./cats.ts";
+import { browserStorage, loadMinutes, saveMinutes } from "./settings.ts";
 import { initUpdater } from "./updater.ts";
 import {
   Countdown,
-  DEFAULT_MINUTES,
   MAX_MINUTES,
   MIN_MINUTES,
   blockCountFor,
   blockProgress,
+  finishNoticeVisible,
   formatRemaining,
   parseMinutes,
+  timerKeyAction,
   type Status,
 } from "./timer.ts";
 
@@ -29,6 +31,8 @@ const prevCatButton = getElement<HTMLButtonElement>("prev-cat");
 const nextCatButton = getElement<HTMLButtonElement>("next-cat");
 const statusText = getElement<HTMLSpanElement>("status");
 const remainingText = getElement<HTMLDivElement>("remaining");
+const finishNotice = getElement<HTMLDivElement>("finish-notice");
+const finishNoticeText = getElement<HTMLButtonElement>("finish-notice-text");
 
 const STATUS_LABEL: Record<Status, string> = {
   idle: "대기 중",
@@ -43,7 +47,13 @@ const TOGGLE_LABEL: Record<Status, string> = {
   finished: "다시 시작",
 };
 
-const countdown = new Countdown(DEFAULT_MINUTES * 60_000);
+// 마지막으로 쓴 분 설정으로 시작한다(저장된 값이 없으면 15분).
+const storage = browserStorage();
+const initialMinutes = loadMinutes(storage);
+const countdown = new Countdown(initialMinutes * 60_000);
+minutesInput.value = String(initialMinutes);
+// 종료 알림을 사용자가 닫았는지. 새로 종료될 때마다 false로 돌아간다.
+let finishDismissed = false;
 // 새 버전 알림 배너. Tauri 앱 안에서만 동작한다(브라우저에서는 아무 일도 하지 않음).
 const updater = initUpdater(() => countdown.status);
 // src/assets/cats 폴더의 사진을 모두 모은다. 파일을 넣고 빼면 목록이 바뀐다(개발 서버 재시작 불필요, 빌드 시 반영).
@@ -59,7 +69,7 @@ const catUrls = Object.entries(
   .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
   .map(([, url]) => url);
 let catIndex: number | null = null;
-let shownMinutes = DEFAULT_MINUTES;
+let shownMinutes = initialMinutes;
 
 // 숫자를 적을 수 있는 최대 블록 수. 이보다 많으면 칸이 좁아 숫자를 숨긴다.
 const MAX_LABELED_BLOCKS = 30;
@@ -100,12 +110,14 @@ function renderControls(): void {
   statusText.textContent = STATUS_LABEL[status];
   resetButton.disabled = status === "idle";
   minutesInput.disabled = status === "running" || status === "paused";
+  finishNotice.hidden = !finishNoticeVisible(status, finishDismissed);
   // 타이머 상태가 바뀌면 배너의 [업데이트] 버튼 활성 여부도 다시 계산한다.
   updater.refresh();
 }
 
 function finishIfDone(): void {
   if (!countdown.tick()) return;
+  finishDismissed = false;
   playAlarm();
   renderBlocks();
   renderControls();
@@ -122,7 +134,8 @@ function frame(): void {
 }
 setInterval(finishIfDone, 500);
 
-toggleButton.addEventListener("click", () => {
+// 시작/일시정지. 버튼 클릭과 Space 단축키가 같이 쓴다.
+function toggleTimer(): void {
   unlockAlarm();
   if (countdown.status === "running") {
     countdown.pause();
@@ -133,11 +146,19 @@ toggleButton.addEventListener("click", () => {
   }
   renderBlocks();
   renderControls();
-});
+}
 
-resetButton.addEventListener("click", () => {
+function resetTimer(): void {
+  if (countdown.status === "idle") return;
   countdown.reset();
   renderBlocks();
+  renderControls();
+}
+
+toggleButton.addEventListener("click", toggleTimer);
+resetButton.addEventListener("click", resetTimer);
+finishNoticeText.addEventListener("click", () => {
+  finishDismissed = true;
   renderControls();
 });
 
@@ -163,6 +184,22 @@ document.addEventListener("keydown", (event) => {
   showStepCat(delta);
 });
 
+// Space = 시작/일시정지, R = 리셋. 입력창에서 타이핑 중이거나 조합키(Cmd+R 새로고침 등)·키 반복은 무시한다.
+// 버튼에 포커스가 있을 때 Space는 브라우저가 클릭으로 처리하므로 여기서 또 처리하지 않는다.
+document.addEventListener("keydown", (event) => {
+  const action = timerKeyAction(event.code);
+  if (action === null || event.defaultPrevented || event.repeat) return;
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  const target = event.target;
+  if (target instanceof HTMLElement) {
+    if (target.closest("input, textarea, select, [contenteditable]")) return;
+    if (action === "toggle" && target.closest("button")) return;
+  }
+  event.preventDefault();
+  if (action === "toggle") toggleTimer();
+  else resetTimer();
+});
+
 minutesInput.addEventListener("change", () => {
   const minutes = parseMinutes(minutesInput.value);
   if (minutes === null) {
@@ -176,6 +213,7 @@ minutesInput.addEventListener("change", () => {
     return;
   }
   shownMinutes = minutes;
+  saveMinutes(storage, minutes);
   minutesInput.value = String(minutes);
   buildBlocks();
   renderBlocks();

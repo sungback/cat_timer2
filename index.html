@@ -30,6 +30,11 @@
       <button id="update-later" type="button">나중에</button>
     </div>
 
+    <!-- 시간이 끝나면 화면이 깜빡이고 문구가 나온다. 문구를 누르면 닫힌다. -->
+    <div id="finish-notice" class="finish-notice" role="alert" hidden>
+      <button id="finish-notice-text" type="button" class="finish-text" title="눌러서 닫기">시간 종료!</button>
+    </div>
+
     <div id="remaining" class="remaining" role="timer" aria-label="남은 시간">15:00</div>
 
     <div id="blocks" class="blocks" aria-hidden="true"></div>
