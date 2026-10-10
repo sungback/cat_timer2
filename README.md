@@ -22,6 +22,26 @@ npm test         # 테스트
 npm run build    # dist/ 에 빌드
 ```
 
+## 릴리스 절차
+
+릴리스는 `v*` 태그를 푸시하면 GitHub Actions(`.github/workflows/build.yml`)가 만든다. 앱 안 업데이트는 이 릴리스를 보고 동작한다.
+
+1. **검증**: `npm test`, `npm run build`, `cargo test --manifest-path src-tauri/Cargo.toml`이 모두 통과하는지 확인한다.
+2. **버전 올리기**: 아래 두 곳을 같은 값으로 바꾼다(`src-tauri/tauri.conf.json`은 `package.json`을 따라가므로 손대지 않는다).
+   - `npm version X.Y.Z --no-git-tag-version` (`package.json`, `package-lock.json`)
+   - `src-tauri/Cargo.toml`의 `version` (`Cargo.lock`은 `cargo test` 때 자동으로 바뀐다)
+3. **커밋·푸시**: 변경을 커밋하고 `main`에 푸시한다. `ci`와 `build` 워크플로가 통과할 때까지 기다린다(`gh run list`, `gh run watch <id>`).
+4. **태그 푸시**: `git tag vX.Y.Z && git push origin vX.Y.Z`. mac(arm64)·windows 빌드가 모두 성공하면 `release` 잡이 파일을 검사한 뒤 릴리스를 만든다.
+5. **확인**: `gh release view vX.Y.Z`로 에셋 4개(`CatTimer2-macOS.zip`, `CatTimer2-Windows-Portable.exe`와 각각의 `.sha256`)가 올라갔는지 본다.
+
+주의할 점
+
+- 태그, `package.json`, `Cargo.toml`의 버전이 하나라도 다르면 `scripts/check-release.sh`가 실패해 릴리스가 만들어지지 않는다.
+- 에셋 파일명은 고정이다. 앱 안 업데이트(`src-tauri/src/update.rs`)가 이름으로 찾으므로 바꾸면 업데이트가 깨진다.
+- 잘못 나간 릴리스는 `gh release delete vX.Y.Z --cleanup-tag`로 지우고 다음 패치 버전으로 다시 낸다. 이미 받아 간 사용자가 있을 수 있으므로 같은 번호를 재사용하지 않는다.
+- 서명이 없어서 처음 설치할 때 macOS는 "개인정보 보호 및 보안"에서 허용이, Windows는 SmartScreen 경고에서 "추가 정보 → 실행"이 필요하다. 앱 안 업데이트로 올릴 때는 이 경고가 다시 뜨지 않도록 설계했다.
+- v0.1.1 이하 Windows 앱은 업데이트 도우미 결함이 있어 앱 안 업데이트가 안 된다. v0.1.2 이상 exe를 직접 받아 교체해야 한다.
+
 ## 사진 추가·교체
 
 `src/assets/cats/` 폴더에 사진 파일을 넣거나 빼면 목록이 자동으로 바뀝니다. 규격과 출처 기록 방법은 [`src/assets/cats/SOURCES.md`](src/assets/cats/SOURCES.md)에 있습니다.
