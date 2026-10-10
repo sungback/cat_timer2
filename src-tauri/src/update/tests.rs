@@ -417,6 +417,13 @@ fn start_test_server(body: Vec<u8>) -> u16 {
             text,
           )
         }
+        // Content-Length 없이 본문을 보내고 연결을 닫는다(길이를 속이거나 모르는 서버).
+        "/stream" => ("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".to_string(), body.clone()),
+        // 체크섬 파일 상한(4KB)을 넘는 본문
+        "/bigsum" => (
+          "HTTP/1.1 200 OK\r\nContent-Length: 5000\r\nConnection: close\r\n\r\n".to_string(),
+          vec![b'a'; 5000],
+        ),
         _ => (
           "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
           Vec::new(),
@@ -434,7 +441,8 @@ fn download_to_saves_the_file_reports_progress_and_follows_redirects() {
   let body: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();
   let port = start_test_server(body.clone());
   let dir = temp_case_dir("download");
-  let client = http_client(Duration::from_secs(10)).unwrap();
+  // 운영 정책은 http 리다이렉트를 막으므로, 이 테스트는 로컬 서버만 허용하는 클라이언트를 쓴다.
+  let client = http_client_with(Duration::from_secs(10), |u| u.host_str() == Some("127.0.0.1")).unwrap();
 
   for route in ["file", "redirect"] {
     let dest = dir.join(format!("{route}.bin"));
@@ -444,6 +452,7 @@ fn download_to_saves_the_file_reports_progress_and_follows_redirects() {
       &client,
       &format!("http://127.0.0.1:{port}/{route}"),
       &dest,
+      MAX_DOWNLOAD_BYTES,
       &mut on_progress,
     ))
     .unwrap_or_else(|e| panic!("{route} 다운로드 실패: {e}"));
@@ -473,6 +482,7 @@ fn download_to_and_fetch_text_report_http_errors() {
     &client,
     &format!("http://127.0.0.1:{port}/missing"),
     &dest,
+    MAX_DOWNLOAD_BYTES,
     &mut |_, _| {},
   ))
   .unwrap_err();
@@ -495,4 +505,207 @@ fn download_to_and_fetch_text_report_http_errors() {
   assert!(!err.is_empty());
 
   fs::remove_dir_all(&dir).unwrap();
+}
+
+// --- 보안 보강: 리다이렉트 제한·크기 상한 -------------------------------------------
+
+#[test]
+fn redirects_are_limited_to_https_github_hosts() {
+  let allowed = [
+    "https://github.com/sungback/cat_timer2/releases/download/v1/x.zip",
+    "https://api.github.com/repos/x",
+    "https://objects.githubusercontent.com/github-production-release-asset/1",
+    "https://release-assets.githubusercontent.com/a/b",
+    "https://GITHUB.com/x",
+  ];
+  for url in allowed {
+    assert!(is_allowed_redirect(&reqwest::Url::parse(url).unwrap()), "{url}는 허용해야 한다");
+  }
+  let denied = [
+    "http://github.com/x",                       // https가 아님
+    "http://objects.githubusercontent.com/x",    // https가 아님
+    "https://evilgithub.com/x",                  // 접미사만 같은 다른 도메인
+    "https://github.com.evil.com/x",             // 호스트가 다름
+    "https://notgithubusercontent.com/x",
+    "https://githubusercontent.com/x",           // 하위 도메인이 아님
+    "https://github.com:8443/x",                 // 기본 포트가 아님
+    "https://127.0.0.1/x",
+    "https://example.com/x",
+    "ftp://github.com/x",
+  ];
+  for url in denied {
+    assert!(!is_allowed_redirect(&reqwest::Url::parse(url).unwrap()), "{url}는 거부해야 한다");
+  }
+}
+
+#[test]
+fn production_client_refuses_redirects_to_disallowed_hosts() {
+  // 로컬 서버의 /redirect는 http://127.0.0.1/file 로 넘긴다 → 운영 정책(https·GitHub 호스트만)은 거부해야 한다.
+  let port = start_test_server(vec![1, 2, 3]);
+  let dir = temp_case_dir("redirect-deny");
+  let dest = dir.join("out.bin");
+  let client = http_client(Duration::from_secs(10)).unwrap();
+
+  let err = tauri::async_runtime::block_on(download_to(
+    &client,
+    &format!("http://127.0.0.1:{port}/redirect"),
+    &dest,
+    MAX_DOWNLOAD_BYTES,
+    &mut |_, _| {},
+  ))
+  .unwrap_err();
+  assert!(err.contains("허용되지 않은 리다이렉트"), "원인이 문구에 보여야 한다: {err}");
+  assert!(!dest.exists(), "거부된 리다이렉트는 파일을 남기지 않는다");
+
+  fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn limit_formatting_uses_mb_or_kb() {
+  assert_eq!(format_limit(MAX_DOWNLOAD_BYTES), "200MB");
+  assert_eq!(format_limit(MAX_CHECKSUM_BYTES), "4KB");
+  assert_eq!(MAX_DOWNLOAD_BYTES, 200 * 1024 * 1024, "요청된 상한은 200MB");
+}
+
+#[test]
+fn download_rejects_declared_size_above_the_limit_before_writing() {
+  let body = vec![7u8; 300_000];
+  let port = start_test_server(body);
+  let dir = temp_case_dir("limit-declared");
+  let client = http_client_with(Duration::from_secs(10), |u| u.host_str() == Some("127.0.0.1")).unwrap();
+  let dest = dir.join("big.bin");
+  let mut called = false;
+
+  let err = tauri::async_runtime::block_on(download_to(
+    &client,
+    &format!("http://127.0.0.1:{port}/file"),
+    &dest,
+    100_000,
+    &mut |_, _| called = true,
+  ))
+  .unwrap_err();
+  assert!(err.contains("크기 상한"), "{err}");
+  assert!(!dest.exists(), "선언된 크기가 상한을 넘으면 파일을 만들지 않는다");
+  assert!(!called, "진행률도 보내지 않는다");
+
+  fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn download_aborts_and_removes_partial_file_when_stream_exceeds_the_limit() {
+  let body = vec![9u8; 300_000];
+  let port = start_test_server(body);
+  let dir = temp_case_dir("limit-stream");
+  let client = http_client_with(Duration::from_secs(10), |u| u.host_str() == Some("127.0.0.1")).unwrap();
+  let dest = dir.join("stream.bin");
+
+  // /stream은 Content-Length 없이 보내므로 받는 도중에 상한을 넘는다.
+  let err = tauri::async_runtime::block_on(download_to(
+    &client,
+    &format!("http://127.0.0.1:{port}/stream"),
+    &dest,
+    100_000,
+    &mut |_, _| {},
+  ))
+  .unwrap_err();
+  assert!(err.contains("크기 상한"), "{err}");
+  assert!(!dest.exists(), "상한을 넘어 중단되면 부분 파일을 지운다");
+
+  fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn download_limit_is_inclusive_at_the_exact_size() {
+  let body = vec![1u8; 300_000];
+  let port = start_test_server(body);
+  let dir = temp_case_dir("limit-edge");
+  let client = http_client_with(Duration::from_secs(10), |u| u.host_str() == Some("127.0.0.1")).unwrap();
+
+  let ok = dir.join("exact.bin");
+  tauri::async_runtime::block_on(download_to(
+    &client,
+    &format!("http://127.0.0.1:{port}/file"),
+    &ok,
+    300_000,
+    &mut |_, _| {},
+  ))
+  .expect("정확히 상한과 같은 크기는 받을 수 있다");
+  assert_eq!(fs::metadata(&ok).unwrap().len(), 300_000);
+
+  let over = dir.join("over.bin");
+  let err = tauri::async_runtime::block_on(download_to(
+    &client,
+    &format!("http://127.0.0.1:{port}/file"),
+    &over,
+    299_999,
+    &mut |_, _| {},
+  ))
+  .unwrap_err();
+  assert!(err.contains("크기 상한"), "{err}");
+  assert!(!over.exists());
+
+  // 같은 경계가 스트림(길이 미선언)에도 적용된다.
+  let stream_ok = dir.join("stream-exact.bin");
+  tauri::async_runtime::block_on(download_to(
+    &client,
+    &format!("http://127.0.0.1:{port}/stream"),
+    &stream_ok,
+    300_000,
+    &mut |_, _| {},
+  ))
+  .expect("스트림도 정확히 상한과 같으면 받을 수 있다");
+
+  // 스트림은 길이를 미리 알 수 없으므로, 1바이트만 넘어도 받는 도중에 막아야 한다.
+  let stream_over = dir.join("stream-over.bin");
+  let err = tauri::async_runtime::block_on(download_to(
+    &client,
+    &format!("http://127.0.0.1:{port}/stream"),
+    &stream_over,
+    299_999,
+    &mut |_, _| {},
+  ))
+  .unwrap_err();
+  assert!(err.contains("크기 상한"), "{err}");
+  assert!(!stream_over.exists(), "1바이트 초과해도 부분 파일을 남기지 않는다");
+
+  fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn checksum_text_is_capped_at_4kb() {
+  let port = start_test_server(vec![1]);
+  let client = http_client_with(Duration::from_secs(10), |u| u.host_str() == Some("127.0.0.1")).unwrap();
+
+  let err = tauri::async_runtime::block_on(fetch_text(&client, &format!("http://127.0.0.1:{port}/bigsum"))).unwrap_err();
+  assert!(err.contains("크기 상한") && err.contains("4KB"), "{err}");
+
+  // 정상 크기의 체크섬 파일은 그대로 읽힌다.
+  let text = tauri::async_runtime::block_on(fetch_text(&client, &format!("http://127.0.0.1:{port}/sum"))).unwrap();
+  assert_eq!(parse_checksum(&text), "deadbeef");
+}
+
+#[test]
+fn describe_error_joins_the_source_chain() {
+  #[derive(Debug)]
+  struct Inner;
+  impl std::fmt::Display for Inner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "안쪽 원인")
+    }
+  }
+  impl std::error::Error for Inner {}
+  #[derive(Debug)]
+  struct Outer(Inner);
+  impl std::fmt::Display for Outer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "바깥 문구")
+    }
+  }
+  impl std::error::Error for Outer {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+      Some(&self.0)
+    }
+  }
+  assert_eq!(describe_error(&Outer(Inner)), "바깥 문구: 안쪽 원인");
+  assert_eq!(describe_error(&Inner), "안쪽 원인");
 }

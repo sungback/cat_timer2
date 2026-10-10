@@ -26,6 +26,12 @@ const API_TIMEOUT: Duration = Duration::from_secs(10);
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(120);
 const USER_AGENT: &str = "CatTimer2-updater";
 
+// 응답 크기 상한. 상한을 넘으면 받다가 중단한다(디스크·메모리를 채우는 비정상 릴리스 방어).
+const MAX_DOWNLOAD_BYTES: u64 = 200 * 1024 * 1024;
+const MAX_CHECKSUM_BYTES: u64 = 4 * 1024;
+const MAX_API_BYTES: u64 = 1024 * 1024;
+const MAX_REDIRECTS: usize = 10;
+
 // ---------------------------------------------------------------------------
 // 릴리스 정보와 순수 함수 (네트워크·파일 없이 테스트할 수 있는 부분)
 // ---------------------------------------------------------------------------
@@ -117,6 +123,32 @@ pub fn is_release_page_url(url: &str) -> bool {
     && url
       .chars()
       .all(|c| c.is_ascii_alphanumeric() || "/._-:~%".contains(c))
+}
+
+/// 리다이렉트를 따라가도 되는 주소인가: https이고 기본 포트이며 호스트가 GitHub 계열일 때만.
+/// (GitHub 릴리스 다운로드는 `*.githubusercontent.com`으로 넘어간다)
+pub fn is_allowed_redirect(url: &reqwest::Url) -> bool {
+  if url.scheme() != "https" || url.port().is_some() {
+    return false;
+  }
+  let Some(host) = url.host_str() else {
+    return false;
+  };
+  let host = host.to_ascii_lowercase();
+  host == "github.com" || host.ends_with(".github.com") || host.ends_with(".githubusercontent.com")
+}
+
+/// 크기 상한을 사람이 읽을 수 있게: 1MB 이상이면 MB, 아니면 KB.
+pub fn format_limit(max: u64) -> String {
+  if max >= 1024 * 1024 {
+    format!("{}MB", max / (1024 * 1024))
+  } else {
+    format!("{}KB", max / 1024)
+  }
+}
+
+fn too_large_message(max: u64) -> String {
+  format!("받으려는 파일이 크기 상한({})을 넘어 중단했습니다.", format_limit(max))
 }
 
 pub fn parse_release(bytes: &[u8]) -> Option<Release> {
@@ -308,11 +340,59 @@ pub fn platform_asset() -> Option<&'static str> {
 }
 
 fn http_client(timeout: Duration) -> Result<reqwest::Client, String> {
+  http_client_with(timeout, is_allowed_redirect)
+}
+
+/// 리다이렉트 허용 규칙을 바꿀 수 있는 생성자(운영에서는 `is_allowed_redirect`, 테스트에서는 로컬 서버 허용).
+fn http_client_with(timeout: Duration, allow: fn(&reqwest::Url) -> bool) -> Result<reqwest::Client, String> {
+  let policy = reqwest::redirect::Policy::custom(move |attempt| {
+    if attempt.previous().len() >= MAX_REDIRECTS {
+      return attempt.error("리다이렉트가 너무 많습니다.");
+    }
+    if allow(attempt.url()) {
+      attempt.follow()
+    } else {
+      let host = attempt.url().host_str().unwrap_or("?").to_string();
+      attempt.error(format!("허용되지 않은 리다이렉트: {host}"))
+    }
+  });
   reqwest::Client::builder()
     .user_agent(USER_AGENT)
     .timeout(timeout)
+    .redirect(policy)
     .build()
     .map_err(|e| format!("HTTP 클라이언트를 만들지 못했습니다: {e}"))
+}
+
+/// reqwest 오류는 최상위 문구만으로는 원인을 알기 어려워 원인 체인을 이어 붙인다.
+fn describe_error(e: &dyn std::error::Error) -> String {
+  let mut text = e.to_string();
+  let mut source = e.source();
+  while let Some(inner) = source {
+    text.push_str(": ");
+    text.push_str(&inner.to_string());
+    source = inner.source();
+  }
+  text
+}
+
+/// 응답 본문을 최대 `max`바이트까지만 읽는다. 선언된 길이나 실제 받은 양이 넘으면 오류.
+async fn read_limited(mut resp: reqwest::Response, max: u64) -> Result<Vec<u8>, String> {
+  if resp.content_length().is_some_and(|n| n > max) {
+    return Err(too_large_message(max));
+  }
+  let mut out: Vec<u8> = Vec::new();
+  while let Some(chunk) = resp
+    .chunk()
+    .await
+    .map_err(|e| format!("응답을 읽지 못했습니다: {}", describe_error(&e)))?
+  {
+    if out.len() as u64 + chunk.len() as u64 > max {
+      return Err(too_large_message(max));
+    }
+    out.extend_from_slice(&chunk);
+  }
+  Ok(out)
 }
 
 /// 오프라인·rate limit·파싱 오류는 모두 None(조용히 건너뜀).
@@ -326,7 +406,7 @@ async fn fetch_latest(client: &reqwest::Client) -> Option<Release> {
   if !resp.status().is_success() {
     return None;
   }
-  let bytes = resp.bytes().await.ok()?;
+  let bytes = read_limited(resp, MAX_API_BYTES).await.ok()?;
   parse_release(&bytes)
 }
 
@@ -335,20 +415,19 @@ async fn fetch_text(client: &reqwest::Client, url: &str) -> Result<String, Strin
     .get(url)
     .send()
     .await
-    .map_err(|e| format!("체크섬을 받지 못했습니다: {e}"))?;
+    .map_err(|e| format!("체크섬을 받지 못했습니다: {}", describe_error(&e)))?;
   if !resp.status().is_success() {
     return Err(format!("체크섬 다운로드 실패 (HTTP {})", resp.status().as_u16()));
   }
-  resp
-    .text()
-    .await
-    .map_err(|e| format!("체크섬을 읽지 못했습니다: {e}"))
+  let bytes = read_limited(resp, MAX_CHECKSUM_BYTES).await?;
+  String::from_utf8(bytes).map_err(|_| "체크섬 파일이 텍스트가 아닙니다.".to_string())
 }
 
 async fn download_to(
   client: &reqwest::Client,
   url: &str,
   dest: &Path,
+  max_bytes: u64,
   // Tauri 비동기 명령의 future는 Send여야 하므로 콜백에도 Send를 요구한다.
   on_progress: &mut (dyn FnMut(u64, Option<u64>) + Send),
 ) -> Result<(), String> {
@@ -357,22 +436,32 @@ async fn download_to(
     .header("Accept", "application/octet-stream")
     .send()
     .await
-    .map_err(|e| format!("다운로드에 실패했습니다: {e}"))?;
+    .map_err(|e| format!("다운로드에 실패했습니다: {}", describe_error(&e)))?;
   if !resp.status().is_success() {
     return Err(format!("다운로드 실패 (HTTP {})", resp.status().as_u16()));
   }
   let total = resp.content_length();
+  // 길이를 미리 알려 주는 서버는 파일을 만들기 전에 거부한다.
+  if total.is_some_and(|t| t > max_bytes) {
+    return Err(too_large_message(max_bytes));
+  }
   let mut file = File::create(dest).map_err(|e| format!("임시 파일을 만들지 못했습니다: {e}"))?;
   let mut received: u64 = 0;
   while let Some(chunk) = resp
     .chunk()
     .await
-    .map_err(|e| format!("다운로드 중 오류: {e}"))?
+    .map_err(|e| format!("다운로드 중 오류: {}", describe_error(&e)))?
   {
+    received += chunk.len() as u64;
+    // 길이를 알리지 않거나 거짓으로 알리는 서버: 받는 도중에 상한을 넘으면 중단하고 부분 파일을 지운다.
+    if received > max_bytes {
+      drop(file);
+      let _ = fs::remove_file(dest);
+      return Err(too_large_message(max_bytes));
+    }
     file
       .write_all(&chunk)
       .map_err(|e| format!("임시 파일에 쓰지 못했습니다: {e}"))?;
-    received += chunk.len() as u64;
     on_progress(received, total);
   }
   file.flush().map_err(|e| format!("임시 파일 저장 실패: {e}"))?;
@@ -632,7 +721,7 @@ async fn run_update(
       let _ = app.emit("update-progress", Progress { received, total, percent });
     }
   };
-  download_to(client, asset_url, &downloaded, &mut on_progress).await?;
+  download_to(client, asset_url, &downloaded, MAX_DOWNLOAD_BYTES, &mut on_progress).await?;
 
   let expected = parse_checksum(&fetch_text(client, sum_url).await?);
   if !verify_sha256(&downloaded, &expected) {
