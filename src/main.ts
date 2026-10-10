@@ -1,12 +1,17 @@
 import "./style.css";
-import { playAlarm, unlockAlarm } from "./alarm.ts";
+import { playAlarm, playPreview, setAlarmSound, unlockAlarm } from "./alarm.ts";
 import { catStepForKey, pickCatIndex, stepCatIndex } from "./cats.ts";
 import {
   browserStorage,
+  DEFAULT_VOLUME,
   loadAlwaysOnTop,
   loadMinutes,
+  loadMuted,
+  loadVolume,
   saveAlwaysOnTop,
   saveMinutes,
+  saveMuted,
+  saveVolume,
 } from "./settings.ts";
 import { initUpdater } from "./updater.ts";
 import { canPinWindow, isFullscreen, setAlwaysOnTop, setFullscreen } from "./windowing.ts";
@@ -38,6 +43,8 @@ const prevCatButton = getElement<HTMLButtonElement>("prev-cat");
 const nextCatButton = getElement<HTMLButtonElement>("next-cat");
 const statusText = getElement<HTMLSpanElement>("status");
 const remainingText = getElement<HTMLDivElement>("remaining");
+const muteButton = getElement<HTMLButtonElement>("mute");
+const volumeInput = getElement<HTMLInputElement>("volume");
 const pinButton = getElement<HTMLButtonElement>("pin");
 const fullscreenButton = getElement<HTMLButtonElement>("fullscreen");
 const finishNotice = getElement<HTMLDivElement>("finish-notice");
@@ -192,6 +199,44 @@ document.addEventListener("keydown", (event) => {
   event.preventDefault();
   showStepCat(delta);
 });
+
+// --- 알림음: 볼륨, 끄기 ---
+let volume = loadVolume(storage);
+let muted = loadMuted(storage);
+
+function renderSound(): void {
+  const off = muted || volume === 0;
+  muteButton.textContent = off ? "소리 꺼짐" : "소리 켜짐";
+  muteButton.classList.toggle("off", off);
+  volumeInput.value = String(volume);
+  setAlarmSound(volume, muted);
+}
+
+// 슬라이더를 움직이는 동안은 값만 바꾸고, 놓았을 때 크기를 들려 준다. 움직이면 음소거는 풀린다.
+volumeInput.addEventListener("input", () => {
+  volume = Number(volumeInput.value);
+  if (volume > 0) muted = false;
+  renderSound();
+});
+volumeInput.addEventListener("change", () => {
+  saveVolume(storage, volume);
+  saveMuted(storage, muted);
+  unlockAlarm();
+  playPreview();
+});
+muteButton.addEventListener("click", () => {
+  muted = !(muted || volume === 0);
+  // 볼륨 0에서 켜면 소리가 안 나는 상태가 되므로 기본 볼륨으로 올린다.
+  if (!muted && volume === 0) volume = DEFAULT_VOLUME;
+  renderSound();
+  saveVolume(storage, volume);
+  saveMuted(storage, muted);
+  if (!muted) {
+    unlockAlarm();
+    playPreview();
+  }
+});
+renderSound();
 
 // --- 창: 전체화면, 항상 위에 표시 ---
 let fullscreenOn = false;

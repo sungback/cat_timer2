@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadAlwaysOnTop, loadMinutes, saveAlwaysOnTop, saveMinutes, type StorageLike } from "./settings.ts";
+import {
+  loadAlwaysOnTop,
+  loadMinutes,
+  loadMuted,
+  loadVolume,
+  parseVolume,
+  saveAlwaysOnTop,
+  saveMinutes,
+  saveMuted,
+  saveVolume,
+  type StorageLike,
+} from "./settings.ts";
 
 function fakeStorage(initial: Record<string, string> = {}): StorageLike & { data: Record<string, string> } {
   const data = { ...initial };
@@ -64,4 +75,37 @@ test("항상 위 설정: 기본은 꺼짐, 저장하면 복원, 저장소 오류
   };
   assert.equal(loadAlwaysOnTop(broken), false);
   assert.doesNotThrow(() => saveAlwaysOnTop(broken, true));
+});
+
+test("parseVolume: 0~100 정수만 받고 나머지는 100", () => {
+  assert.equal(parseVolume("0"), 0);
+  assert.equal(parseVolume("35"), 35);
+  assert.equal(parseVolume("100"), 100);
+  for (const bad of [null, "", "101", "-5", "abc", "7.5", "1e2"]) assert.equal(parseVolume(bad), 100, String(bad));
+});
+
+test("볼륨·음소거 저장과 복원, 저장소 오류는 기본값", () => {
+  const storage = fakeStorage();
+  assert.equal(loadVolume(storage), 100);
+  assert.equal(loadMuted(storage), false);
+  saveVolume(storage, 40);
+  saveMuted(storage, true);
+  assert.equal(loadVolume(storage), 40);
+  assert.equal(loadMuted(storage), true);
+  saveMuted(storage, false);
+  assert.equal(loadMuted(storage), false);
+  const broken: StorageLike = {
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: () => {
+      throw new Error("blocked");
+    },
+  };
+  assert.equal(loadVolume(broken), 100);
+  assert.equal(loadMuted(broken), false);
+  assert.doesNotThrow(() => {
+    saveVolume(broken, 10);
+    saveMuted(broken, true);
+  });
 });

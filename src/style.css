@@ -145,6 +145,23 @@ body {
   display: none;
 }
 
+/* 알림음: 켜기/끄기 버튼과 볼륨 슬라이더. */
+.sound {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sound input[type="range"] {
+  width: 5rem;
+  accent-color: #e8845c;
+  cursor: pointer;
+}
+
+.controls button.link.off {
+  opacity: 0.5;
+}
+
 /* 켜진 토글(항상 위·전체화면)은 또렷하게 보인다. */
 .controls button.link[aria-pressed="true"] {
   opacity: 1;

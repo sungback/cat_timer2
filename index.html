@@ -24,6 +24,10 @@
           <span id="status" class="status" role="status" aria-live="polite">대기 중</span>
         </div>
         <div class="row secondary">
+          <span class="sound">
+            <button id="mute" type="button" class="link" title="알림음 켜기/끄기">소리 켜짐</button>
+            <input id="volume" type="range" min="0" max="100" step="5" value="100" aria-label="알림음 크기" title="알림음 크기" />
+          </span>
           <button id="pin" type="button" class="link" aria-pressed="false" title="다른 창 위에 항상 표시" hidden>항상 위</button>
           <button id="fullscreen" type="button" class="link" aria-pressed="false" aria-keyshortcuts="F" title="전체화면 (F)">전체화면</button>
           <span id="app-version" class="app-version"></span>
