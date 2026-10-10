@@ -332,28 +332,42 @@ fn mac_helper_restores_the_old_app_when_the_swap_fails() {
 }
 
 #[test]
-fn windows_batch_has_wait_retry_and_failure_fallback() {
+fn windows_batch_retries_move_and_falls_back_to_old_app() {
   let bat = windows_update_batch(
-    777,
-    "cat-timer2.exe",
     r"C:\Apps\100%\CatTimer2.exe",
     r"C:\Temp\stage\CatTimer2-Windows-Portable.exe",
     &[r"C:\Temp\stage"],
   );
   assert!(bat.contains("\r\n") && !bat.contains("\r\r"), "CRLF 줄바꿈");
   assert!(bat.ends_with("\r\n"));
-  assert!(bat.contains(r#"set "CT_PID=777""#));
   assert!(bat.contains(r#"set "CT_CURRENT=C:\Apps\100%%\CatTimer2.exe""#), "% 이스케이프");
-  assert!(bat.contains(r#"tasklist /FI "PID eq %CT_PID%""#));
   assert!(bat.contains(r#"rmdir /s /q "C:\Temp\stage""#));
-  // 종료 대기(waitloop) → 이동 재시도(moveloop) → 성공(moved) 순서, 실패 시 failed에서 기존 앱 재실행
-  let wait = bat.find(":waitloop").unwrap();
-  let swap = bat.find(":swap").unwrap();
+  // 이동 재시도(moveloop) → 성공(moved) 순서, 실패 시 failed에서 기존 앱 재실행
+  let moveloop = bat.find(":moveloop").unwrap();
   let moved = bat.find(":moved").unwrap();
   let failed = bat.find(":failed").unwrap();
-  assert!(wait < swap && swap < moved && moved < failed);
+  assert!(moveloop < moved && moved < failed);
   assert!(bat[failed..].contains(r#"start "" "%CT_CURRENT%""#), "실패해도 기존 앱을 다시 띄운다");
-  assert!(bat.contains("if %CT_TRIES% GEQ 10 goto failed"), "이동 재시도 횟수 제한");
+  assert!(bat.contains("if %CT_TRIES% GEQ 60 goto failed"), "이동 재시도 횟수 제한");
+}
+
+/// 회귀: 사용자 PATH에 유닉스 find가 있으면 `tasklist | find "PID"`가 오류를 냈다.
+/// 배치는 PATH로 찾는 외부 명령(find, tasklist)을 쓰지 않고, 외부 명령은 System32 전체 경로로 부른다.
+#[test]
+fn windows_batch_does_not_depend_on_path_commands() {
+  let bat = windows_update_batch(r"C:\Apps\CatTimer2.exe", r"C:\Temp\new.exe", &[]);
+  let lines: Vec<&str> = bat.split("\r\n").collect();
+  for forbidden in ["find", "tasklist", "findstr"] {
+    assert!(
+      !lines.iter().any(|l| l.split_whitespace().any(|w| w == forbidden)),
+      "{forbidden}를 쓰면 안 된다"
+    );
+  }
+  for external in ["chcp", "ping"] {
+    for line in lines.iter().filter(|l| l.contains(external)) {
+      assert!(line.contains(r"%SystemRoot%\System32\"), "전체 경로가 필요: {line}");
+    }
+  }
 }
 
 // --- 폴더 탐색 ----------------------------------------------------------

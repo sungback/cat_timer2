@@ -272,41 +272,28 @@ pub fn bat_escape(s: &str) -> String {
 }
 
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-/// Windows: 포터블 단일 exe 교체. 이동이 실패하면(백신 등이 잡고 있을 때) 최대 10번 재시도하고,
-/// 끝내 실패하면 기존 exe를 다시 실행한다.
-pub fn windows_update_batch(
-  pid: u32,
-  image_name: &str,
-  current_exe: &str,
-  new_exe: &str,
-  cleanup_dirs: &[&str],
-) -> String {
+/// Windows: 포터블 단일 exe 교체. 실행 중인 exe는 덮어쓸 수 없으므로, 앱이 종료될 때까지
+/// 이동을 최대 60번(약 1분) 재시도한다. 끝내 실패하면 기존 exe를 다시 실행한다.
+///
+/// 앱 종료를 tasklist | find 로 기다리지 않는다. 사용자 PATH에 유닉스 `find`(Git·MSYS 등)가
+/// System32보다 앞서 있으면 `find "PID"`가 다르게 동작해 오류가 나기 때문이다(v0.1.0·v0.1.1 결함).
+/// 외부 명령(chcp, ping)은 PATH에 기대지 않도록 System32 전체 경로로 부른다.
+pub fn windows_update_batch(current_exe: &str, new_exe: &str, cleanup_dirs: &[&str]) -> String {
   let mut lines: Vec<String> = vec![
     "@echo off".to_string(),
-    "chcp 65001 >nul".to_string(),
+    r#""%SystemRoot%\System32\chcp.com" 65001 >nul"#.to_string(),
     r#"cd /d "%TEMP%""#.to_string(),
     "setlocal".to_string(),
-    format!(r#"set "CT_PID={pid}""#),
-    format!(r#"set "CT_IMAGE={}""#, bat_escape(image_name)),
     format!(r#"set "CT_CURRENT={}""#, bat_escape(current_exe)),
     format!(r#"set "CT_NEW={}""#, bat_escape(new_exe)),
     r#"set "CT_TRIES=0""#.to_string(),
-    ":waitloop".to_string(),
-    r#"tasklist /FI "PID eq %CT_PID%" /FI "IMAGENAME eq %CT_IMAGE%" 2>nul | find "%CT_PID%" >nul 2>&1"#.to_string(),
-    "if errorlevel 1 goto swap".to_string(),
-    "set /a CT_TRIES+=1".to_string(),
-    "if %CT_TRIES% GEQ 180 goto failed".to_string(),
-    "ping -n 2 127.0.0.1 >nul".to_string(),
-    "goto waitloop".to_string(),
-    ":swap".to_string(),
-    "ping -n 2 127.0.0.1 >nul".to_string(),
-    r#"set "CT_TRIES=0""#.to_string(),
+    // 앱이 종료되기 전에는 이동이 실패한다. 1초 간격으로 재시도한다.
     ":moveloop".to_string(),
     r#"move /y "%CT_NEW%" "%CT_CURRENT%" >nul 2>&1"#.to_string(),
     r#"if not exist "%CT_NEW%" goto moved"#.to_string(),
     "set /a CT_TRIES+=1".to_string(),
-    "if %CT_TRIES% GEQ 10 goto failed".to_string(),
-    "ping -n 2 127.0.0.1 >nul".to_string(),
+    "if %CT_TRIES% GEQ 60 goto failed".to_string(),
+    r#""%SystemRoot%\System32\ping.exe" -n 2 127.0.0.1 >nul"#.to_string(),
     "goto moveloop".to_string(),
     ":moved".to_string(),
     r#"start "" "%CT_CURRENT%""#.to_string(),
@@ -586,30 +573,27 @@ fn spawn_helper(staging: &Path, current: &Path, new_target: &Path) -> Result<(),
 fn spawn_helper(staging: &Path, current: &Path, new_target: &Path) -> Result<(), String> {
   use std::os::windows::process::CommandExt;
 
+  // CREATE_NO_WINDOW만 쓴다. DETACHED_PROCESS와 함께 쓰면 CREATE_NO_WINDOW가 무시되어
+  // cmd가 새 콘솔(검은 창)을 띄운다. 부모(앱)가 종료돼도 자식 프로세스는 계속 실행된다.
   const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-  const DETACHED_PROCESS: u32 = 0x0000_0008;
 
-  let image = current
-    .file_name()
-    .map(|n| n.to_string_lossy().to_string())
-    .ok_or_else(|| "실행 파일 이름을 알 수 없습니다.".to_string())?;
   // 배치 파일은 staging 밖에 둬서, staging 폴더 정리 중에도 스스로를 지울 수 있게 한다.
   let batch_path = std::env::temp_dir().join(format!("CatTimer2-update-{}.bat", std::process::id()));
   let batch = windows_update_batch(
-    std::process::id(),
-    &image,
     &current.to_string_lossy(),
     &new_target.to_string_lossy(),
     &[&staging.to_string_lossy()],
   );
   fs::write(&batch_path, batch).map_err(|e| format!("도우미 배치 파일을 쓰지 못했습니다: {e}"))?;
-  Command::new("cmd")
+  // PATH 검색에 기대지 않고 ComSpec(보통 C:\Windows\System32\cmd.exe)으로 실행한다.
+  let shell = std::env::var_os("ComSpec").unwrap_or_else(|| "cmd.exe".into());
+  Command::new(shell)
     .arg("/c")
     .arg(&batch_path)
     .stdin(Stdio::null())
     .stdout(Stdio::null())
     .stderr(Stdio::null())
-    .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
+    .creation_flags(CREATE_NO_WINDOW)
     .spawn()
     .map_err(|e| format!("도우미를 실행하지 못했습니다: {e}"))?;
   Ok(())
