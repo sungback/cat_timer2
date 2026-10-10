@@ -72,7 +72,8 @@ body {
   opacity: 0.5;
 }
 
-.controls button {
+.controls button,
+.update-banner button {
   padding: 0.45rem 0.9rem;
   border: 1px solid rgb(255 255 255 / 0.35);
   border-radius: 0.5rem;
@@ -82,22 +83,60 @@ body {
   cursor: pointer;
 }
 
-.controls button.primary {
+.controls button.primary,
+.update-banner button.primary {
   min-width: 5.5rem;
   border-color: transparent;
   background: #e8845c;
   font-weight: 700;
 }
 
-.controls button:disabled {
+.controls button:disabled,
+.update-banner button:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
 .controls button:focus-visible,
+.update-banner button:focus-visible,
 .minutes input:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
+}
+
+.app-version {
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+/* 새 버전 알림: 컨트롤 패널 바로 아래. hidden 속성이 display를 덮어쓰지 않게 한다. */
+.update-banner {
+  position: fixed;
+  top: calc(2vh + 4.4rem);
+  right: 2vw;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: min(40rem, 92vw);
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.8rem;
+  background: var(--panel-bg);
+  backdrop-filter: blur(8px);
+  font-size: 0.9rem;
+}
+
+.update-banner[hidden] {
+  display: none;
+}
+
+.update-banner button[hidden] {
+  display: none;
+}
+
+/* 버튼 글자가 두 줄로 꺾이지 않게 하고, 문구가 길면 문구 쪽이 줄바꿈한다. */
+.update-banner button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .status {

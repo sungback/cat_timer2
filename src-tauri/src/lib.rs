@@ -1,6 +1,13 @@
+mod update;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .invoke_handler(tauri::generate_handler![
+      update::check_update,
+      update::apply_update,
+      update::open_release_page
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

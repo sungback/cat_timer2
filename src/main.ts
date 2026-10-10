@@ -1,6 +1,7 @@
 import "./style.css";
 import { playAlarm, unlockAlarm } from "./alarm.ts";
 import { catStepForKey, pickCatIndex, stepCatIndex } from "./cats.ts";
+import { initUpdater } from "./updater.ts";
 import {
   Countdown,
   DEFAULT_MINUTES,
@@ -43,6 +44,8 @@ const TOGGLE_LABEL: Record<Status, string> = {
 };
 
 const countdown = new Countdown(DEFAULT_MINUTES * 60_000);
+// 새 버전 알림 배너. Tauri 앱 안에서만 동작한다(브라우저에서는 아무 일도 하지 않음).
+const updater = initUpdater(() => countdown.status);
 // src/assets/cats 폴더의 사진을 모두 모은다. 파일을 넣고 빼면 목록이 바뀐다(개발 서버 재시작 불필요, 빌드 시 반영).
 // 이전/다음 버튼이 이 순서(파일명 숫자 순서)대로 사진을 넘긴다.
 const catUrls = Object.entries(
@@ -97,6 +100,8 @@ function renderControls(): void {
   statusText.textContent = STATUS_LABEL[status];
   resetButton.disabled = status === "idle";
   minutesInput.disabled = status === "running" || status === "paused";
+  // 타이머 상태가 바뀌면 배너의 [업데이트] 버튼 활성 여부도 다시 계산한다.
+  updater.refresh();
 }
 
 function finishIfDone(): void {
