@@ -40,6 +40,7 @@ const blocksRoot = getElement<HTMLDivElement>("blocks");
 const minutesInput = getElement<HTMLInputElement>("minutes");
 const toggleButton = getElement<HTMLButtonElement>("toggle");
 const resetButton = getElement<HTMLButtonElement>("reset");
+const shrinkButton = getElement<HTMLButtonElement>("shrink");
 const extendButton = getElement<HTMLButtonElement>("extend");
 const prevCatButton = getElement<HTMLButtonElement>("prev-cat");
 const nextCatButton = getElement<HTMLButtonElement>("next-cat");
@@ -122,14 +123,26 @@ function renderBlocks(): void {
   });
 }
 
+// +1분/-1분 버튼 활성 여부. 남은 시간이 줄어드는 동안 바뀌므로 매 프레임에서도 부른다.
+function updateAdjustButtons(): void {
+  const { status } = countdown;
+  // 시작한 뒤에만, 최대(180분)까지만 늘릴 수 있다.
+  extendButton.disabled = status === "idle" || countdown.totalMs + MS_PER_BLOCK > MAX_MINUTES * MS_PER_BLOCK;
+  // 줄이면 바로 끝나 버리거나(남은 시간 1분 이하) 최소 1분 아래가 되면 막는다.
+  const canShrink =
+    (status === "running" || status === "paused") &&
+    countdown.totalMs - MS_PER_BLOCK >= MIN_MINUTES * MS_PER_BLOCK &&
+    countdown.totalMs - MS_PER_BLOCK > countdown.elapsedMs;
+  shrinkButton.disabled = !canShrink;
+}
+
 function renderControls(): void {
   const { status } = countdown;
   toggleButton.textContent = TOGGLE_LABEL[status];
   statusText.textContent = STATUS_LABEL[status];
   resetButton.disabled = status === "idle";
-  // 시작한 뒤에만, 최대(180분)까지만 늘릴 수 있다.
-  extendButton.disabled = status === "idle" || countdown.totalMs + MS_PER_BLOCK > MAX_MINUTES * MS_PER_BLOCK;
   minutesInput.disabled = status === "running" || status === "paused";
+  updateAdjustButtons();
   finishNotice.hidden = !finishNoticeVisible(status, finishDismissed);
   // 타이머 상태가 바뀌면 배너의 [업데이트] 버튼 활성 여부도 다시 계산한다.
   updater.refresh();
@@ -149,6 +162,7 @@ function frame(): void {
   if (countdown.status === "running") {
     finishIfDone();
     renderBlocks();
+    updateAdjustButtons();
   }
   requestAnimationFrame(frame);
 }
@@ -175,11 +189,11 @@ function resetTimer(): void {
   renderControls();
 }
 
-// 총 시간을 1분 늘린다. 블록이 한 칸 늘고, 종료 후에 누르면 이어서 진행한다.
-// 임시 연장이라 저장하지 않는다(다음 실행은 저장된 분 설정으로 시작).
-function extendTimer(): void {
+// 총 시간을 1분 늘리거나 줄인다. 블록이 한 칸 늘거나 줄고, 종료 후에 늘리면 이어서 진행한다.
+// 임시 조정이라 저장하지 않는다(다음 실행은 저장된 분 설정으로 시작).
+function adjustTotal(change: () => boolean): void {
   unlockAlarm();
-  if (!countdown.extend(MS_PER_BLOCK, MAX_MINUTES * MS_PER_BLOCK)) return;
+  if (!change()) return;
   shownMinutes = countdown.totalMs / MS_PER_BLOCK;
   minutesInput.value = String(shownMinutes);
   buildBlocks();
@@ -187,8 +201,17 @@ function extendTimer(): void {
   renderControls();
 }
 
+function extendTimer(): void {
+  adjustTotal(() => countdown.extend(MS_PER_BLOCK, MAX_MINUTES * MS_PER_BLOCK));
+}
+
+function shrinkTimer(): void {
+  adjustTotal(() => countdown.shrink(MS_PER_BLOCK, MIN_MINUTES * MS_PER_BLOCK));
+}
+
 toggleButton.addEventListener("click", toggleTimer);
 extendButton.addEventListener("click", extendTimer);
+shrinkButton.addEventListener("click", shrinkTimer);
 resetButton.addEventListener("click", resetTimer);
 finishNoticeText.addEventListener("click", () => {
   finishDismissed = true;

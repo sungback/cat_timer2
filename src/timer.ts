@@ -97,6 +97,16 @@ export class Countdown {
     return true;
   }
 
+  // 진행 중·일시정지에서 총 시간을 줄인다. 줄인 뒤에도 남은 시간이 있어야 하고(바로 끝나 버리는 경우는 거절),
+  // 총 시간은 minMs 아래로 내려갈 수 없다. 거절하면 아무것도 바꾸지 않고 false.
+  shrink(subMs: number, minMs: number): boolean {
+    if (this.status !== "running" && this.status !== "paused") return false;
+    const next = this.totalMs - subMs;
+    if (subMs <= 0 || next < minMs || next <= this.elapsedMs) return false;
+    this.totalMs = next;
+    return true;
+  }
+
   // 시간이 다 됐으면 finished로 바꾸고, 이번 호출에서 막 끝났을 때만 true를 돌려준다.
   tick(): boolean {
     if (this.status !== "running" || this.elapsedMs < this.totalMs) return false;

@@ -241,3 +241,56 @@ test("extend: 대기 중이거나 최대 시간을 넘으면 바꾸지 않는다
   assert.equal(full.totalMs, 180 * 60_000);
   assert.equal(full.extend(0, 180 * 60_000), false);
 });
+
+test("shrink: 진행 중에 1분 줄이면 지난 시간은 그대로고 끝이 1분 앞당겨진다", () => {
+  const clock = fakeClock();
+  const timer = new Countdown(15 * 60_000, clock.now);
+  timer.start();
+  clock.advance(5 * 60_000);
+  assert.equal(timer.shrink(60_000, 60_000), true);
+  assert.equal(timer.totalMs, 14 * 60_000);
+  assert.equal(timer.elapsedMs, 5 * 60_000);
+  assert.equal(timer.status, "running");
+  clock.advance(9 * 60_000 - 1);
+  assert.equal(timer.tick(), false);
+  clock.advance(1);
+  assert.equal(timer.tick(), true, "14분에 끝난다");
+});
+
+test("shrink: 일시정지 중에도 되고 상태는 그대로", () => {
+  const clock = fakeClock();
+  const timer = new Countdown(5 * 60_000, clock.now);
+  timer.start();
+  clock.advance(60_000);
+  timer.pause();
+  assert.equal(timer.shrink(60_000, 60_000), true);
+  assert.equal(timer.status, "paused");
+  assert.equal(timer.totalMs, 4 * 60_000);
+});
+
+test("shrink: 줄이면 바로 끝나는 경우·최소 시간 아래·대기/종료 상태는 거절", () => {
+  const clock = fakeClock();
+  // 남은 시간이 정확히 1분이면 줄이면 바로 끝나므로 거절
+  const edge = new Countdown(5 * 60_000, clock.now);
+  edge.start();
+  clock.advance(4 * 60_000);
+  assert.equal(edge.shrink(60_000, 60_000), false);
+  assert.equal(edge.totalMs, 5 * 60_000);
+  // 남은 시간이 1분보다 조금이라도 많으면 허용
+  const ok = new Countdown(5 * 60_000, clock.now);
+  ok.start();
+  clock.advance(4 * 60_000 - 1);
+  assert.equal(ok.shrink(60_000, 60_000), true);
+  // 최소 시간(1분) 아래로는 못 내려간다
+  const min = new Countdown(60_000, clock.now);
+  min.start();
+  assert.equal(min.shrink(60_000, 60_000), false);
+  // 대기 중, 종료 후
+  const idle = new Countdown(15 * 60_000, clock.now);
+  assert.equal(idle.shrink(60_000, 60_000), false);
+  const done = new Countdown(60_000, clock.now);
+  done.start();
+  clock.advance(60_000);
+  done.tick();
+  assert.equal(done.shrink(60_000, 60_000), false);
+});
