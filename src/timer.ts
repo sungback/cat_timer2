@@ -93,12 +93,15 @@ export class Countdown {
   }
 }
 
-export type TimerKeyAction = "toggle" | "reset";
+export type TimerKeyAction = "toggle" | "reset" | "fullscreen" | "exit-fullscreen";
 
-// 키보드 단축키: Space = 시작/일시정지, R = 리셋. 한글 자판에서도 되도록 key가 아니라 물리 키(code)로 판단한다.
+// 키보드 단축키: Space = 시작/일시정지, R = 리셋, F = 전체화면 전환, Esc = 전체화면 해제.
+// 한글 자판에서도 되도록 key가 아니라 물리 키(code)로 판단한다.
 export function timerKeyAction(code: string): TimerKeyAction | null {
   if (code === "Space") return "toggle";
   if (code === "KeyR") return "reset";
+  if (code === "KeyF") return "fullscreen";
+  if (code === "Escape") return "exit-fullscreen";
   return null;
 }
 

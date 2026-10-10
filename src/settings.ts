@@ -2,6 +2,7 @@ import { DEFAULT_MINUTES, parseMinutes } from "./timer.ts";
 
 // 마지막으로 쓴 분 설정을 기억한다. localStorage를 못 쓰는 환경(차단·비공개 창 등)에서는 조용히 기본값을 쓴다.
 const MINUTES_KEY = "cattimer2.minutes";
+const ALWAYS_ON_TOP_KEY = "cattimer2.alwaysOnTop";
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
@@ -30,5 +31,24 @@ export function saveMinutes(storage: StorageLike | null, minutes: number): void 
     storage.setItem(MINUTES_KEY, String(minutes));
   } catch {
     // 저장하지 못해도 타이머 동작에는 영향이 없다.
+  }
+}
+
+// 항상 위에 표시 설정. 저장된 값이 "1"일 때만 켜진 것으로 본다.
+export function loadAlwaysOnTop(storage: StorageLike | null): boolean {
+  if (!storage) return false;
+  try {
+    return storage.getItem(ALWAYS_ON_TOP_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveAlwaysOnTop(storage: StorageLike | null, on: boolean): void {
+  if (!storage) return;
+  try {
+    storage.setItem(ALWAYS_ON_TOP_KEY, on ? "1" : "0");
+  } catch {
+    // 저장하지 못해도 이번 실행의 동작에는 영향이 없다.
   }
 }

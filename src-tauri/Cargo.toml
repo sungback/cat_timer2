@@ -1,6 +1,6 @@
 [package]
 name = "cat-timer2"
-version = "0.1.6"
+version = "0.1.7"
 description = "고양이 사진과 함께 보는 시각 타이머"
 authors = ["sungback"]
 license = "MIT"

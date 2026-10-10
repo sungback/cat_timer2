@@ -173,6 +173,8 @@ test("catStepForKey: ←는 이전, →는 다음, 다른 키는 무시", () => 
 test("timerKeyAction: Space는 시작/일시정지, R은 리셋, 그 밖은 null", () => {
   assert.equal(timerKeyAction("Space"), "toggle");
   assert.equal(timerKeyAction("KeyR"), "reset");
+  assert.equal(timerKeyAction("KeyF"), "fullscreen");
+  assert.equal(timerKeyAction("Escape"), "exit-fullscreen");
   for (const code of ["Enter", "KeyS", "ArrowLeft", ""]) assert.equal(timerKeyAction(code), null, code);
 });
 

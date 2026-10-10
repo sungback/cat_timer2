@@ -40,17 +40,39 @@ body {
   user-select: none;
 }
 
-.controls {
+/* 오른쪽 위 묶음: 컨트롤 패널 아래에 업데이트 배너가 쌓인다. */
+.top-right {
   position: fixed;
   top: 2vh;
   right: 2vw;
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  max-width: 96vw;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
   padding: 0.6rem 0.8rem;
   border-radius: 0.8rem;
   background: var(--panel-bg);
   backdrop-filter: blur(8px);
+}
+
+.controls .row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.controls .row[hidden] {
+  display: none;
 }
 
 .minutes {
@@ -119,11 +141,19 @@ body {
   white-space: nowrap;
 }
 
-/* 새 버전 알림: 컨트롤 패널 바로 아래. hidden 속성이 display를 덮어쓰지 않게 한다. */
+.controls button.link[hidden] {
+  display: none;
+}
+
+/* 켜진 토글(항상 위·전체화면)은 또렷하게 보인다. */
+.controls button.link[aria-pressed="true"] {
+  opacity: 1;
+  border-color: #e8845c;
+  background: rgb(232 132 92 / 0.35);
+}
+
+/* 새 버전 알림: 컨트롤 패널 바로 아래(.top-right 안). hidden 속성이 display를 덮어쓰지 않게 한다. */
 .update-banner {
-  position: fixed;
-  top: calc(2vh + 4.4rem);
-  right: 2vw;
   display: flex;
   align-items: center;
   gap: 0.6rem;

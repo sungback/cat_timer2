@@ -1,8 +1,15 @@
 import "./style.css";
 import { playAlarm, unlockAlarm } from "./alarm.ts";
 import { catStepForKey, pickCatIndex, stepCatIndex } from "./cats.ts";
-import { browserStorage, loadMinutes, saveMinutes } from "./settings.ts";
+import {
+  browserStorage,
+  loadAlwaysOnTop,
+  loadMinutes,
+  saveAlwaysOnTop,
+  saveMinutes,
+} from "./settings.ts";
 import { initUpdater } from "./updater.ts";
+import { canPinWindow, isFullscreen, setAlwaysOnTop, setFullscreen } from "./windowing.ts";
 import {
   Countdown,
   MAX_MINUTES,
@@ -31,6 +38,8 @@ const prevCatButton = getElement<HTMLButtonElement>("prev-cat");
 const nextCatButton = getElement<HTMLButtonElement>("next-cat");
 const statusText = getElement<HTMLSpanElement>("status");
 const remainingText = getElement<HTMLDivElement>("remaining");
+const pinButton = getElement<HTMLButtonElement>("pin");
+const fullscreenButton = getElement<HTMLButtonElement>("fullscreen");
 const finishNotice = getElement<HTMLDivElement>("finish-notice");
 const finishNoticeText = getElement<HTMLButtonElement>("finish-notice-text");
 
@@ -184,7 +193,63 @@ document.addEventListener("keydown", (event) => {
   showStepCat(delta);
 });
 
-// Space = 시작/일시정지, R = 리셋. 입력창에서 타이핑 중이거나 조합키(Cmd+R 새로고침 등)·키 반복은 무시한다.
+// --- 창: 전체화면, 항상 위에 표시 ---
+let fullscreenOn = false;
+let alwaysOnTop = false;
+
+function renderWindowButtons(): void {
+  fullscreenButton.setAttribute("aria-pressed", String(fullscreenOn));
+  fullscreenButton.textContent = fullscreenOn ? "전체화면 해제" : "전체화면";
+  pinButton.setAttribute("aria-pressed", String(alwaysOnTop));
+}
+
+async function syncFullscreen(): Promise<void> {
+  fullscreenOn = await isFullscreen();
+  renderWindowButtons();
+}
+
+async function changeFullscreen(on: boolean): Promise<void> {
+  try {
+    await setFullscreen(on);
+  } catch {
+    // 전체화면을 쓸 수 없는 환경이면 상태만 다시 읽는다.
+  }
+  await syncFullscreen();
+}
+
+async function togglePin(): Promise<void> {
+  const next = !alwaysOnTop;
+  try {
+    if (await setAlwaysOnTop(next)) {
+      alwaysOnTop = next;
+      saveAlwaysOnTop(storage, next);
+    }
+  } catch {
+    // 실패하면 이전 상태를 유지한다.
+  }
+  renderWindowButtons();
+}
+
+fullscreenButton.addEventListener("click", () => void changeFullscreen(!fullscreenOn));
+pinButton.addEventListener("click", () => void togglePin());
+// 브라우저에서 Esc로 나가거나 OS 기능(맥의 초록 버튼 등)으로 바뀌어도 버튼 표시를 맞춘다.
+document.addEventListener("fullscreenchange", () => void syncFullscreen());
+window.addEventListener("resize", () => void syncFullscreen());
+
+if (canPinWindow()) {
+  pinButton.hidden = false;
+  if (loadAlwaysOnTop(storage)) {
+    setAlwaysOnTop(true)
+      .then((applied) => {
+        alwaysOnTop = applied;
+        renderWindowButtons();
+      })
+      .catch(() => {});
+  }
+}
+void syncFullscreen();
+
+// Space = 시작/일시정지, R = 리셋, F = 전체화면, Esc = 전체화면 해제. 입력창에서 타이핑 중이거나 조합키(Cmd+R 새로고침 등)·키 반복은 무시한다.
 // 버튼에 포커스가 있을 때 Space는 브라우저가 클릭으로 처리하므로 여기서 또 처리하지 않는다.
 document.addEventListener("keydown", (event) => {
   const action = timerKeyAction(event.code);
@@ -195,9 +260,12 @@ document.addEventListener("keydown", (event) => {
     if (target.closest("input, textarea, select, [contenteditable]")) return;
     if (action === "toggle" && target.closest("button")) return;
   }
+  if (action === "exit-fullscreen" && !fullscreenOn) return; // 전체화면이 아니면 Esc는 그대로 둔다.
   event.preventDefault();
   if (action === "toggle") toggleTimer();
-  else resetTimer();
+  else if (action === "reset") resetTimer();
+  else if (action === "fullscreen") void changeFullscreen(!fullscreenOn);
+  else void changeFullscreen(false);
 });
 
 minutesInput.addEventListener("change", () => {

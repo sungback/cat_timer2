@@ -9,25 +9,34 @@
     <img id="background" class="background" alt="" />
     <img class="icon" src="/icon.svg" alt="" />
 
-    <form id="controls" class="controls" autocomplete="off">
-      <label class="minutes">
-        <input id="minutes" type="number" inputmode="numeric" min="1" max="180" step="1" value="15" />
-        <span>분</span>
-      </label>
-      <button id="toggle" type="button" class="primary">시작</button>
-      <button id="reset" type="button">리셋</button>
-      <button id="prev-cat" type="button" aria-label="이전 사진" aria-keyshortcuts="ArrowLeft" title="이전 사진 (←)">&lt;-</button>
-      <button id="next-cat" type="button" aria-label="다음 사진" aria-keyshortcuts="ArrowRight" title="다음 사진 (→)">-&gt;</button>
-      <span id="status" class="status" role="status" aria-live="polite">대기 중</span>
-      <span id="app-version" class="app-version"></span>
-      <button id="update-check" type="button" class="link" title="새 버전이 있는지 지금 확인">업데이트 확인</button>
-    </form>
+    <!-- 오른쪽 위: 컨트롤 패널(두 줄)과 그 아래 업데이트 배너. 줄이 늘어도 배너가 겹치지 않게 한 묶음으로 쌓는다. -->
+    <div class="top-right">
+      <form id="controls" class="controls" autocomplete="off">
+        <div class="row">
+          <label class="minutes">
+            <input id="minutes" type="number" inputmode="numeric" min="1" max="180" step="1" value="15" />
+            <span>분</span>
+          </label>
+          <button id="toggle" type="button" class="primary" aria-keyshortcuts="Space">시작</button>
+          <button id="reset" type="button" aria-keyshortcuts="R">리셋</button>
+          <button id="prev-cat" type="button" aria-label="이전 사진" aria-keyshortcuts="ArrowLeft" title="이전 사진 (←)">&lt;-</button>
+          <button id="next-cat" type="button" aria-label="다음 사진" aria-keyshortcuts="ArrowRight" title="다음 사진 (→)">-&gt;</button>
+          <span id="status" class="status" role="status" aria-live="polite">대기 중</span>
+        </div>
+        <div class="row secondary">
+          <button id="pin" type="button" class="link" aria-pressed="false" title="다른 창 위에 항상 표시" hidden>항상 위</button>
+          <button id="fullscreen" type="button" class="link" aria-pressed="false" aria-keyshortcuts="F" title="전체화면 (F)">전체화면</button>
+          <span id="app-version" class="app-version"></span>
+          <button id="update-check" type="button" class="link" title="새 버전이 있는지 지금 확인">업데이트 확인</button>
+        </div>
+      </form>
 
-    <div id="update-banner" class="update-banner" role="status" aria-live="polite" hidden>
-      <span id="update-text"></span>
-      <button id="update-install" type="button" class="primary"></button>
-      <button id="update-release" type="button">릴리스 페이지</button>
-      <button id="update-later" type="button">나중에</button>
+      <div id="update-banner" class="update-banner" role="status" aria-live="polite" hidden>
+        <span id="update-text"></span>
+        <button id="update-install" type="button" class="primary"></button>
+        <button id="update-release" type="button">릴리스 페이지</button>
+        <button id="update-later" type="button">나중에</button>
+      </div>
     </div>
 
     <!-- 시간이 끝나면 화면이 깜빡이고 문구가 나온다. 문구를 누르면 닫힌다. -->

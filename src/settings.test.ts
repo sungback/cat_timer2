@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { loadMinutes, saveMinutes, type StorageLike } from "./settings.ts";
+import { loadAlwaysOnTop, loadMinutes, saveAlwaysOnTop, saveMinutes, type StorageLike } from "./settings.ts";
 
 function fakeStorage(initial: Record<string, string> = {}): StorageLike & { data: Record<string, string> } {
   const data = { ...initial };
@@ -43,4 +43,25 @@ test("저장소가 예외를 던져도 기본값·무시로 동작한다", () =>
   };
   assert.equal(loadMinutes(broken), 15);
   assert.doesNotThrow(() => saveMinutes(broken, 20));
+});
+
+test("항상 위 설정: 기본은 꺼짐, 저장하면 복원, 저장소 오류는 꺼짐", () => {
+  assert.equal(loadAlwaysOnTop(fakeStorage()), false);
+  assert.equal(loadAlwaysOnTop(null), false);
+  const storage = fakeStorage();
+  saveAlwaysOnTop(storage, true);
+  assert.equal(loadAlwaysOnTop(storage), true);
+  saveAlwaysOnTop(storage, false);
+  assert.equal(loadAlwaysOnTop(storage), false);
+  assert.equal(loadAlwaysOnTop(fakeStorage({ "cattimer2.alwaysOnTop": "true" })), false, "1만 켜짐으로 본다");
+  const broken: StorageLike = {
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: () => {
+      throw new Error("blocked");
+    },
+  };
+  assert.equal(loadAlwaysOnTop(broken), false);
+  assert.doesNotThrow(() => saveAlwaysOnTop(broken, true));
 });
