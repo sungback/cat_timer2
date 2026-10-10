@@ -19,6 +19,7 @@ import {
   Countdown,
   MAX_MINUTES,
   MIN_MINUTES,
+  MS_PER_BLOCK,
   blockCountFor,
   blockProgress,
   finishNoticeVisible,
@@ -39,6 +40,7 @@ const blocksRoot = getElement<HTMLDivElement>("blocks");
 const minutesInput = getElement<HTMLInputElement>("minutes");
 const toggleButton = getElement<HTMLButtonElement>("toggle");
 const resetButton = getElement<HTMLButtonElement>("reset");
+const extendButton = getElement<HTMLButtonElement>("extend");
 const prevCatButton = getElement<HTMLButtonElement>("prev-cat");
 const nextCatButton = getElement<HTMLButtonElement>("next-cat");
 const statusText = getElement<HTMLSpanElement>("status");
@@ -125,6 +127,8 @@ function renderControls(): void {
   toggleButton.textContent = TOGGLE_LABEL[status];
   statusText.textContent = STATUS_LABEL[status];
   resetButton.disabled = status === "idle";
+  // 시작한 뒤에만, 최대(180분)까지만 늘릴 수 있다.
+  extendButton.disabled = status === "idle" || countdown.totalMs + MS_PER_BLOCK > MAX_MINUTES * MS_PER_BLOCK;
   minutesInput.disabled = status === "running" || status === "paused";
   finishNotice.hidden = !finishNoticeVisible(status, finishDismissed);
   // 타이머 상태가 바뀌면 배너의 [업데이트] 버튼 활성 여부도 다시 계산한다.
@@ -171,7 +175,20 @@ function resetTimer(): void {
   renderControls();
 }
 
+// 총 시간을 1분 늘린다. 블록이 한 칸 늘고, 종료 후에 누르면 이어서 진행한다.
+// 임시 연장이라 저장하지 않는다(다음 실행은 저장된 분 설정으로 시작).
+function extendTimer(): void {
+  unlockAlarm();
+  if (!countdown.extend(MS_PER_BLOCK, MAX_MINUTES * MS_PER_BLOCK)) return;
+  shownMinutes = countdown.totalMs / MS_PER_BLOCK;
+  minutesInput.value = String(shownMinutes);
+  buildBlocks();
+  renderBlocks();
+  renderControls();
+}
+
 toggleButton.addEventListener("click", toggleTimer);
+extendButton.addEventListener("click", extendTimer);
 resetButton.addEventListener("click", resetTimer);
 finishNoticeText.addEventListener("click", () => {
   finishDismissed = true;

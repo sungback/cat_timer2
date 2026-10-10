@@ -185,3 +185,59 @@ test("finishNoticeVisible: 종료 상태이고 닫지 않았을 때만 보인다
     assert.equal(finishNoticeVisible(status, false), false, status);
   }
 });
+
+test("extend: 진행 중에 1분 늘리면 지난 시간은 그대로고 끝이 1분 뒤로 간다", () => {
+  const clock = fakeClock();
+  const timer = new Countdown(15 * 60_000, clock.now);
+  timer.start();
+  clock.advance(5 * 60_000);
+  assert.equal(timer.extend(60_000, 180 * 60_000), true);
+  assert.equal(timer.totalMs, 16 * 60_000);
+  assert.equal(timer.elapsedMs, 5 * 60_000);
+  assert.equal(timer.status, "running");
+  clock.advance(10 * 60_000 + 59_000);
+  assert.equal(timer.tick(), false, "원래 끝(15분)을 지나도 아직 안 끝난다");
+  clock.advance(1_000);
+  assert.equal(timer.tick(), true, "16분에 끝난다");
+});
+
+test("extend: 일시정지 중에는 일시정지를 유지한다", () => {
+  const clock = fakeClock();
+  const timer = new Countdown(5 * 60_000, clock.now);
+  timer.start();
+  clock.advance(2 * 60_000);
+  timer.pause();
+  assert.equal(timer.extend(60_000, 180 * 60_000), true);
+  assert.equal(timer.status, "paused");
+  assert.equal(timer.totalMs, 6 * 60_000);
+  assert.equal(timer.elapsedMs, 2 * 60_000);
+});
+
+test("extend: 종료 후에 늘리면 이어서 진행한다", () => {
+  const clock = fakeClock();
+  const timer = new Countdown(60_000, clock.now);
+  timer.start();
+  clock.advance(60_000);
+  assert.equal(timer.tick(), true);
+  assert.equal(timer.status, "finished");
+  assert.equal(timer.extend(60_000, 180 * 60_000), true);
+  assert.equal(timer.status, "running");
+  assert.equal(timer.elapsedMs, 60_000);
+  clock.advance(59_000);
+  assert.equal(timer.tick(), false);
+  clock.advance(1_000);
+  assert.equal(timer.tick(), true);
+});
+
+test("extend: 대기 중이거나 최대 시간을 넘으면 바꾸지 않는다", () => {
+  const clock = fakeClock();
+  const idle = new Countdown(15 * 60_000, clock.now);
+  assert.equal(idle.extend(60_000, 180 * 60_000), false);
+  assert.equal(idle.totalMs, 15 * 60_000);
+
+  const full = new Countdown(180 * 60_000, clock.now);
+  full.start();
+  assert.equal(full.extend(60_000, 180 * 60_000), false);
+  assert.equal(full.totalMs, 180 * 60_000);
+  assert.equal(full.extend(0, 180 * 60_000), false);
+});

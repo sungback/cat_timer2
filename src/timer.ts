@@ -84,6 +84,19 @@ export class Countdown {
     return true;
   }
 
+  // 시작한 뒤(진행 중·일시정지·종료)에 총 시간을 늘린다. 지난 시간은 그대로 두고 끝나는 시점만 뒤로 간다.
+  // 종료 상태에서 늘리면 이어서 진행한다. 대기 중이거나 maxMs를 넘으면 아무것도 바꾸지 않고 false.
+  extend(addMs: number, maxMs: number): boolean {
+    if (this.status === "idle" || addMs <= 0 || this.totalMs + addMs > maxMs) return false;
+    if (this.status === "finished") {
+      // tick()이 경과 시간을 이전 총 시간으로 고정해 두었으므로 그대로 이어서 달린다.
+      this.startedAt = this.now();
+      this.status = "running";
+    }
+    this.totalMs += addMs;
+    return true;
+  }
+
   // 시간이 다 됐으면 finished로 바꾸고, 이번 호출에서 막 끝났을 때만 true를 돌려준다.
   tick(): boolean {
     if (this.status !== "running" || this.elapsedMs < this.totalMs) return false;
