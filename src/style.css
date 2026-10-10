@@ -171,9 +171,10 @@ body {
 /* 하단에 분 수만큼의 블록(1블록 = 1분)이 왼쪽부터 순서대로 사라진다. 원본은 숫자 1~15 블록 15개. */
 .blocks {
   position: fixed;
-  right: 0;
+  /* 좌우에 조금 여백을 두고 가운데 정렬한다. 남은 시간 표시·컨트롤 패널의 오른쪽 여백(2vw)과 맞춘다. */
+  right: 2vw;
   bottom: 0;
-  left: 0;
+  left: 2vw;
   height: var(--blocks-height);
   display: grid;
   grid-template-columns: repeat(var(--block-count, 15), 1fr);
